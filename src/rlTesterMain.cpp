@@ -6,11 +6,12 @@ using namespace std;
 
 int main(int argc, char **argv) {
 	
-	int numFracBits = 16;
+	int numFracBits = 8;
 	int length = numFracBits * 2;
 	int numIntBits = length - numFracBits;
 
-	int numStates = numFracBits;
+	int numStages = 1;
+	int numStates = numFracBits * numStages;
 	int numActionsPerState = 3;
 
 
@@ -60,8 +61,9 @@ int main(int argc, char **argv) {
 	
 	float fl_a = 3.14f;
 	float fl_b = 1.23f;
+	//float fl_d = 5.67f;
+	//float fl_c = fl_a * fl_b + fl_d;
 	float fl_c = fl_a * fl_b;
-
 	
 	FixedPoint_t fx_a;
 	FixedPoint_t fx_b;
@@ -70,8 +72,6 @@ int main(int argc, char **argv) {
 	int action;
 	float fl_c_dout;
 	float reward;
-	float bias;
-	float change;
 	int numEpisodes = 100000;
 	int doutNumFracBits;
 	float minError = 0.10f;
@@ -90,12 +90,8 @@ int main(int argc, char **argv) {
 	//	fx_c = fx_a * fx_b;
 	//	fl_c_dout = FixedPoint::toFloat(doutNumFracBits, fx_c);
 	//
-	//	change = (1.0f - (fabsf(target - fl_c_dout) / fmax(target, fl_c_dout)));
-	//	bias = 17.0f - float(length);
-	//	reward = change + bias;
-	//	reward = 1.0f / reward;
+	//	reward = 1.0f - ((fabsf(target - fl_c_dout) / fmax(target, fl_c_dout)) / float(length));
 	//	cout << reward << endl;
-	//
 	//
 	//}
 	//exit(0);
@@ -123,10 +119,7 @@ int main(int argc, char **argv) {
 			fx_c = fx_a * fx_b;
 			fl_c_dout = FixedPoint::toFloat(doutNumFracBits, fx_c);
 
-			change = (1.0f - (fabsf(target - fl_c_dout) / fmax(target, fl_c_dout)));
-			bias = 33.0f - float(length);
-			reward = change + bias;
-			reward = 1.0f / reward;
+			reward = 1.0f - ((fabsf(target - fl_c_dout) / fmax(target, fl_c_dout)) / float(length));
 			
 			agent.UpdateQTable(reward);
 		
