@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
 	fd.open("file2.csv");
 	fd << "Epoch" << "," << "CurrentBitWidth" << endl;
 	agent.m_currentState = numStates - 1;
-	fd << 0 << "," << stateTuple[agent.m_currentState].param0_numFracBits + stateTuple[agent.m_currentState].param0_numFracBits << endl;
+	fd << 0 << "," << stateTuple[agent.m_currentState].param0_numFracBits + stateTuple[agent.m_currentState].param1_numFracBits << endl;
 	cout << "[INIT] Initial state" << " " << agent.m_currentState << "." << endl;
 	cout << "[INIT] Value is" << " " << fl_a * fl_b << "." << endl << endl;
 	for (int j = 0; j < numEpochs; j++) {
@@ -200,9 +200,10 @@ int main(int argc, char **argv) {
 		agent.UpdateQTable(reward);
 		cout << "[REWARD] Reward for state:" << " " << agent.m_currentState << ", and action:" << " " << action << " " << "is" << " " << reward << "." << endl;
 		if(positiveReward == true) {
+			cout << "[REWARD] Reward was positive so transition to new state." << endl;
 			agent.NextState();
 		}
-		fd << (j + 1) << "," << stateTuple[agent.m_currentState].param0_numFracBits + stateTuple[agent.m_currentState].param0_numFracBits << endl;
+		fd << (j + 1) << "," << stateTuple[agent.m_currentState].param0_numFracBits + stateTuple[agent.m_currentState].param1_numFracBits << endl;
 	}
 	fd.close();
 	agent.PrintQMatrix();
