@@ -1,0 +1,83 @@
+#include "RL.hpp"
+#include "FixedPoint.hpp"
+#include <iostream>
+#include <fstream>
+#include <algorithm> 
+
+
+using namespace std;
+
+
+int main(int argc, char **argv) {
+	// BEGIN CODE -----------------------------------------------------------------------------------------------------------------------------------
+	int numStates = 6 ;	
+	int numActionsPerState = numStates;
+	bool validActionsPerState[6][6] = { 
+		{false, false, false, false,  true, false},	// state 0
+		{false, false, false,  true, false, true },	// state 1
+		{false, false, false,  true, false, false},	// state 2
+		{false,  true,  true, false,  true, false},	// state 3
+		{false, false, false,  true, false, true },	// state 4
+		{false,  true, false, false,  true, false}	// state 5
+	};
+	int transitionMatrix[6][6] = { 
+		{-1, -1, -1, -1,  4, -1},	// state 0
+		{-1, -1, -1,  3, -1,  5},	// state 1
+		{-1, -1, -1,  3, -1, -1},	// state 2
+		{-1,  1,  2, -1,  4, -1},	// state 3
+		{ 0, -1, -1,  3, -1,  5},	// state 4
+		{-1,  1, -1, -1,  4, -1}	// state 5
+	};
+	QLearner agent(numStates, numActionsPerState, (bool*)validActionsPerState, (int*)transitionMatrix, 0.0f, 0.8f, 0.2f);
+	srand(time(NULL));
+	// END CODE -------------------------------------------------------------------------------------------------------------------------------------
+	
+	
+	// BEGIN CODE -----------------------------------------------------------------------------------------------------------------------------------
+	vector<int> states;
+	// set some values:
+	for(int i = 0 ; i < numStates; i++) {
+		states.push_back(i); 
+	}
+	// using built-in random generator:
+	std::random_shuffle(states.begin(), states.end());
+	// END CODE -------------------------------------------------------------------------------------------------------------------------------------
+
+	
+	// BEGIN CODE -----------------------------------------------------------------------------------------------------------------------------------
+	int action;
+	int nextState;
+	int numEpochs = 1000;
+	float rewardMatrix[6][6] = {
+		{-1, -1, -1, -1,  0,  -1},	// state 0
+		{-1, -1, -1,  0, -1, 100},	// state 1
+		{-1, -1, -1,  0, -1,  -1},	// state 2
+		{-1,  0,  0, -1,  0,  -1},	// state 3
+		{0,  -1, -1,  0, -1, 100},	// state 4
+		{-1,  0  -1, -1,  0, 100},	// state 5
+	};
+	float reward;
+	for(int i = 0; i < numEpochs; i++) {
+		// agent.m_currentState = rand() % numStates;
+		agent.m_currentState = 1;
+		cout << "State" << " " << agent.m_currentState << endl;
+		cout << "Epsilon is" << " " << agent.m_epsilon << endl;
+		while (true) {
+			if(agent.m_currentState == 5) {
+				cout << "Goal state reached." << endl;
+				break;
+			}
+			action = agent.GetNextAction();
+			nextState = transitionMatrix[agent.m_currentState][action];
+			reward = rewardMatrix[agent.m_currentState][action];
+			agent.UpdateQTable(reward);
+			cout << "Reward for state" << " " << agent.m_currentState << ", and action " << action << " is " << reward << "." << endl;
+			agent.NextState();
+		}
+	}
+	// END CODE -------------------------------------------------------------------------------------------------------------------------------------
+
+	cout << endl << endl;
+	agent.PrintQMatrix();
+	return 0;
+}

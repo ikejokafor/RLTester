@@ -4,286 +4,209 @@
 #include <fstream>
 #include <algorithm> 
 
+
 using namespace std;
 
+
 typedef struct stateTuple {
+	// state params
 	int param0_numFracBits;
 	int param1_numFracBits;
+	// state matrix encoding
 	int stateEncoding;
 } stateTuple_t;
 
-// 0 param0_numFracBits up
-// 1 param0_numFracBits dwn
-// 2 param1_numFracBits up
-// 3 param1_numFracBits dwn
-// 4 param2_numFracBits up
-// 5 param2_numFracBits dwn
-// 6 stay
 
-int myrandom(int i) { return std::rand() % i;}
-
-stateTuple_t *createStateSpace(int numStates, int numActionsPerState, int numFracBits, bool *validActionsPerState, int *transitionMatrix) {
+float getReward(stateTuple_t *stateTuple, 
+				float fl_a, 
+				float fl_b, 
+				int currentState, 
+				int action, 
+				int nextState, 
+				float errorThresh,
+				float maxPrec,
+				float penalty,
+				float penaltyFactor,
+				float currStateBias,
+				float nextStateBias,
+				bool &positiveReward) {
+	float currentStateLength = stateTuple[currentState].param0_numFracBits + stateTuple[currentState].param1_numFracBits;
+	float nextStateLength = stateTuple[nextState].param0_numFracBits + stateTuple[nextState].param1_numFracBits;
+	FixedPoint_t fx_curr_a = FixedPoint::create(stateTuple[currentState].param0_numFracBits, fl_a);
+	FixedPoint_t fx_curr_b = FixedPoint::create(stateTuple[currentState].param1_numFracBits, fl_b);
+	FixedPoint_t fx_curr_res = fx_curr_a * fx_curr_b;
+	FixedPoint_t fx_next_a = FixedPoint::create(stateTuple[nextState].param0_numFracBits, fl_a);
+	FixedPoint_t fx_next_b = FixedPoint::create(stateTuple[nextState].param1_numFracBits, fl_b);
+	FixedPoint_t fx_next_res = fx_next_a * fx_next_b;	
+	float fl_res = fl_a * fl_b;
+	float fl_curr_res_dout = FixedPoint::toFloat((stateTuple[currentState].param0_numFracBits + stateTuple[currentState].param1_numFracBits), fx_curr_res);
+	float fl_next_res_dout = FixedPoint::toFloat((stateTuple[nextState].param0_numFracBits + stateTuple[nextState].param1_numFracBits), fx_next_res);
+	float currStateErrNorm = 1.0f - (fabsf(fl_res - fl_curr_res_dout) / fl_res);
+	float nextStateErrNorm = 1.0f - (fabsf(fl_res - fl_next_res_dout) / fl_res);
+	float nextStateErr = (fabsf(fl_res - fl_next_res_dout) / fl_res);
+	float errNormDiff = fabsf(currStateErrNorm - nextStateErrNorm);
+	float lengthDiffNorm = maxPrec - fabsf(currentStateLength - nextStateLength);
 	
-	stateTuple_t *stateTuple = (stateTuple_t*)malloc(sizeof(stateTuple_t) * numStates);
-	for (int i = 0; i < numStates; i++) {
-		stateTuple[i].stateEncoding = -1;
+	cout << "[REWARD] Current State Error Normalized is" << " " << currStateErrNorm << "." << endl;
+	cout << "[REWARD] Current State Length is" << " " << currentStateLength << "." << endl;
+	cout << "[REWARD] Next State Error Normalized is" << " " << nextStateErrNorm << "." << endl;	
+	cout << "[REWARD] Next State Length is" << " " << nextStateLength << "." << endl;
+		
+	float reward = 0.0f;				
+	if (nextStateErr <= errorThresh && nextState == currentState) {
+		reward = currStateErrNorm;
+		positiveReward = true;
+	} else if (nextStateErr <= errorThresh && nextStateErrNorm >= currStateErrNorm && nextStateLength < currentStateLength) {	// best case
+		reward = currStateErrNorm + (errNormDiff + 1.0f) / lengthDiffNorm;
+		positiveReward = true;	
+	} else if (nextStateErr <= errorThresh && nextStateErrNorm < currStateErrNorm && nextStateLength > currentStateLength) {	// worst case
+		reward = currStateErrNorm - errNormDiff / lengthDiffNorm;
+		positiveReward = false;
+	} else if (nextStateErr <= errorThresh) {
+		reward = currStateErrNorm + (errNormDiff + 1.0f) / lengthDiffNorm;
+		if(nextStateLength > currentStateLength) {
+			positiveReward = false;
+		} else {
+			positiveReward = true;
+		}
+	} else {
+		reward = -FLT_MAX;
+		positiveReward = false;
 	}
+					
 	
-	stateTuple[0].param0_numFracBits = numFracBits;
-	stateTuple[0].param1_numFracBits = numFracBits;
-	stateTuple[0].stateEncoding = 0;
+	return reward;
+}
+
+
+stateTuple_t *createStateSpace(int numStates, int numActionsPerState, bool **validActionsPerState, int **transitionMatrix, int minNumFracBits, int maxNumFracBits) {
 	
-	for (int i = 0; i < numStates; i++) {		
-		for (int j = 0; j < numActionsPerState; j++) {
-			stateTuple_t nextState;
-			nextState.param0_numFracBits = stateTuple[i].param0_numFracBits; 
-			nextState.param1_numFracBits = stateTuple[i].param1_numFracBits; 
-			nextState.stateEncoding		 = stateTuple[i].stateEncoding;
-			// param 0 up
-			if(j == 0 && stateTuple[i].param0_numFracBits < numFracBits) {
-				nextState.param0_numFracBits = stateTuple[i].param0_numFracBits + 1;
-				index2D(numStates, numActionsPerState, validActionsPerState, i, j) = true;
-			} else if(j == 0 && stateTuple[i].param0_numFracBits == numFracBits) {
-				index2D(numStates, numActionsPerState, validActionsPerState, i, j) = false;
-			}
-			// param 0 down
-			if(j == 1 && stateTuple[i].param0_numFracBits > 2) {
-				nextState.param0_numFracBits = stateTuple[i].param0_numFracBits - 1;
-				index2D(numStates, numActionsPerState, validActionsPerState, i, j) = true;
-			} else if(j == 1 && stateTuple[i].param0_numFracBits == 2) {
-				index2D(numStates, numActionsPerState, validActionsPerState, i, j) = false;
-			}
-			// param 1 up
-			if(j == 2 && stateTuple[i].param1_numFracBits < numFracBits) {
-				nextState.param1_numFracBits = stateTuple[i].param1_numFracBits + 1;
-				index2D(numStates, numActionsPerState, validActionsPerState, i, j) = true;
-			} else if(j == 2 && stateTuple[i].param1_numFracBits == numFracBits) {
-				index2D(numStates, numActionsPerState, validActionsPerState, i, j) = false;
-			}
-			// param 1 down
-			if(j == 3 && stateTuple[i].param1_numFracBits > 2) {
-				nextState.param1_numFracBits = stateTuple[i].param1_numFracBits - 1;
-				index2D(numStates, numActionsPerState, validActionsPerState, i, j) = true;
-			} else if(j == 3 && stateTuple[i].param1_numFracBits == 2) {
-				index2D(numStates, numActionsPerState, validActionsPerState, i, j) = false;
-			}
-			// stay
-			if(j == 4) {
-				index2D(numStates, numActionsPerState, validActionsPerState, i, j) = true;
-			}
-			
-			// check if next state encoding already exists
-			int k;
-			for (k = 0; k < numStates; k++) {
-				if (stateTuple[k].param0_numFracBits == nextState.param0_numFracBits 
-						&& stateTuple[k].param1_numFracBits == nextState.param1_numFracBits
-						&& stateTuple[k].stateEncoding != -1) {
-					index2D(numStates, numActionsPerState, transitionMatrix, i, j) = k;
-					goto label0;
-				}
-			}
-			// find a free State
-			if(k == numStates) {
-				for (k = 0; k < numStates; k++) {
-					if (stateTuple[k].stateEncoding == -1) {
-						stateTuple[k].param0_numFracBits = nextState.param0_numFracBits;
-						stateTuple[k].param1_numFracBits = nextState.param1_numFracBits;
-						stateTuple[k].stateEncoding = k;
-						index2D(numStates, numActionsPerState, transitionMatrix, i, j) = k;
-						break;
-					}
-				}
-			}
-			
-			
-			
-			label0: continue;
+	(*validActionsPerState) = (bool*)malloc(numStates * numActionsPerState * sizeof(bool));
+	memset((*validActionsPerState), 1, numStates * numActionsPerState * sizeof(bool));
+	(*transitionMatrix) = (int*)malloc(numStates * numActionsPerState * sizeof(int));
+
+	
+	stateTuple_t *stateTuple = (stateTuple_t*)malloc(numStates * sizeof(stateTuple_t));
+	for (int i = 0, a = minNumFracBits, b = minNumFracBits, k = 0; i < numStates; i++, k++) {
+		stateTuple[i].stateEncoding = k;
+		stateTuple[i].param0_numFracBits = a;
+		stateTuple[i].param1_numFracBits = b;
+		if (b == maxNumFracBits) {
+			b = minNumFracBits;
+			a++;			
+		} else {
+			b++;
 		}
 	}
+	
+	
+	for (int i = 0; i < numStates; i++) {		
+		for (int j = 0, k = 0; j < numActionsPerState; j++, k++) {
+			index2D(numStates, numActionsPerState, (*transitionMatrix), i, j) = k;
+		}
+	}
+	
 	
 	return stateTuple;
 }
 
 
 int main(int argc, char **argv) {
-	
-	int numFracBits = 8;
-	int length;
-	
-	int numStates = 49;
-	int numActionsPerState = 5;
-	ofstream fd;
-	
-	bool *validActionsPerState = (bool*)malloc(sizeof(bool) * numStates * numActionsPerState);
-	int *transitionMatrix = (int*)malloc(numStates * numActionsPerState * sizeof(int));
-	stateTuple_t *stateTuple = createStateSpace(numStates, numActionsPerState, numFracBits, validActionsPerState, transitionMatrix);
-
-		
-	QLearner agent(numStates, numActionsPerState, validActionsPerState, transitionMatrix, 0.0f);
-	
-	// print out valid actions per state
-	fd.open("file1.txt");
-	for (int i = 0; i < numStates; i++) {
-		fd << "state: " << i << " , " << "FracBits: " << stateTuple[i].param0_numFracBits << ", " << stateTuple[i].param1_numFracBits << ", ";
-		fd << "Valid Actions: ";
-		for (int j = 0; j < numActionsPerState; j++) {
-			fd << index2D(numStates, numActionsPerState, validActionsPerState, i, j) << " ";
-		}
-		fd << endl;
-	}
-	fd.close();
-	
-	// print out transition matrix
-	fd.open("file2.txt");
-	for (int i = 0; i < numStates; i++) {
-		fd << "state: " << i << " , " << "FracBits: " << stateTuple[i].param0_numFracBits << ", " << stateTuple[i].param1_numFracBits << ", ";
-		fd << "Transitions: ";	
-		for (int j = 0; j < numActionsPerState; j++) {
-			if (index2D(numStates, numActionsPerState, validActionsPerState, i, j)) {
-				fd << index2D(numStates, numActionsPerState, transitionMatrix, i, j) << " ";
-			}
-			else {
-				fd << -1 << " ";
-			}
-		}
-		fd << endl;
-	}
-	fd.close();	
-	
-	
-	float fl_a = 6.736f;
-	float fl_b = 9.845f;
-	
-	float fl_res = fl_a * fl_b;
+	// BEGIN CODE -----------------------------------------------------------------------------------------------------------------------------------
+	srand(time(NULL));
+	ofstream fd;	
+	int maxNumFracBits = 28;
+	int minNumFracBits = 8;
+	int numStates = ((maxNumFracBits - minNumFracBits) + 1) * ((maxNumFracBits - minNumFracBits) + 1);	
+	int numActionsPerState = numStates;
+	bool *validActionsPerState;
+	int *transitionMatrix;
+	stateTuple_t *stateTuple = createStateSpace(numStates, numActionsPerState, &validActionsPerState, &transitionMatrix, minNumFracBits, maxNumFracBits);
+	int numEpochs =  numStates * numStates;
+	float epsilon = 1.0f;
+	float epsilonDecayFactor = 1.0f / (numStates * numStates);
+	float discountFactor = 1.0f;
+	float learningRate = 1.0f;
+	QLearner agent(numStates, numActionsPerState, validActionsPerState, transitionMatrix, epsilon, epsilonDecayFactor, discountFactor, learningRate);
+	// END CODE -------------------------------------------------------------------------------------------------------------------------------------
 
 	
-	FixedPoint_t fx_curr_a;
-	FixedPoint_t fx_curr_b;
-	FixedPoint_t fx_curr_res;
-
-	FixedPoint_t fx_next_a;
-	FixedPoint_t fx_next_b;
-	FixedPoint_t fx_next_res;
-	
-	int action;
-	float fl_curr_res_dout;
-	float fl_next_res_dout;
-	float reward = 0;
-	int numEpochs = 100000;
-	float errorThresh = 0.02f;
-	float omega = 0.02f;
-	int nextState;
-	int currentLength;
-	int nextLength;
-	float currStateErr;
-	float nextStateErr;
-	float currStateWht;
-	float nextStateWht;
+	// BEGIN CODE -----------------------------------------------------------------------------------------------------------------------------------
+	// fd.open("file0.csv");
+	// fd << "State Encoding" << "," << "param0_numFracBits" << "," << "param1_numFracBits" << endl;
+	// for(int i = 0; i < numStates; i++) {
+	// 	fd << stateTuple[i].stateEncoding << "," << stateTuple[i].param0_numFracBits << "," << stateTuple[i].param1_numFracBits << endl;
+	// }
+	// fd.close();
+	// fd.open("file1.csv");
+	// fd << "," << endl;
+	// for (int i = 0; i < numStates; i++) {
+	// 	fd << "State" << " " << i;
+	// 	for (int j = 0, k = 0; j < numActionsPerState; j++) {
+	// 		fd << "," << index2D(numStates, numActionsPerState, transitionMatrix, i, j);
+	// 	}
+	// 	fd << endl;
+	// }
+	// fd.close();
+	// END CODE -------------------------------------------------------------------------------------------------------------------------------------
 	
 	
-	//for(int i = 0; i < numStates; i++) {	
-	//
-	//	fx_curr_a = FixedPoint::create(stateTuple[i].param0_numFracBits, fl_a);
-	//	fx_curr_b = FixedPoint::create(stateTuple[i].param1_numFracBits, fl_b);
-	//	
-	//	
-	//	fx_curr_res = fx_curr_a * fx_curr_b;		
-	//	fl_curr_res_dout = FixedPoint::toFloat((stateTuple[i].param0_numFracBits + stateTuple[i].param1_numFracBits), fx_curr_res);
-	//	currentLength = stateTuple[i].param0_numFracBits  + stateTuple[i].param1_numFracBits;
-	//	
-	//	currStateErr = fabsf(fl_res - fl_curr_res_dout) / fl_res;
-	//	currStateWht = ((1.0f - currStateErr) / float(currentLength)) * (exp(currStateErr) * omega);
-	//	if (currStateErr > errorThresh) {
-	//		currStateWht = -1.0f;
-	//	}
-	//	cout << currStateWht << endl;
-	//	
-	//}
-	//exit(0);
-	
-	srand(time(0));
+	// BEGIN CODE -----------------------------------------------------------------------------------------------------------------------------------
 	vector<int> states;
 	// set some values:
-	for(int i = 0 ; i < numStates ; ++i) states.push_back(i); 
+	for(int i = 0 ; i < numStates; i++) {
+		states.push_back(i); 
+	}
 	// using built-in random generator:
 	std::random_shuffle(states.begin(), states.end());
-	// using myrandom:
-	std::random_shuffle(states.begin(), states.end(), myrandom);
+	// END CODE -------------------------------------------------------------------------------------------------------------------------------------
 
-
-	for(int i = 0; i < numStates; i++) { 
-		agent.m_currentState = states[i];
-		for (int j = 0; j < numEpochs; j++) {
-			action = agent.GetNextAction();
-			nextState = index2D(numStates, numActionsPerState, transitionMatrix, agent.m_currentState, action);
-		
-			currentLength = stateTuple[agent.m_currentState].param0_numFracBits + stateTuple[agent.m_currentState].param1_numFracBits;
-			nextLength = stateTuple[nextState].param0_numFracBits + stateTuple[nextState].param1_numFracBits;
-		
-
-			fx_curr_a = FixedPoint::create(stateTuple[agent.m_currentState].param0_numFracBits, fl_a);
-			fx_curr_b = FixedPoint::create(stateTuple[agent.m_currentState].param1_numFracBits, fl_b);
-			fx_next_a = FixedPoint::create(stateTuple[nextState].param0_numFracBits, fl_a);
-			fx_next_b = FixedPoint::create(stateTuple[nextState].param1_numFracBits, fl_b);	
-				
-			fx_curr_res = fx_curr_a * fx_curr_b;
-			fx_next_res = fx_next_a * fx_next_b;
-		
-				
-			fl_curr_res_dout = FixedPoint::toFloat((stateTuple[agent.m_currentState].param0_numFracBits 
-													+ stateTuple[agent.m_currentState].param1_numFracBits),
-													fx_curr_res);
-		
-			fl_next_res_dout = FixedPoint::toFloat((stateTuple[nextState].param0_numFracBits 
-													+ stateTuple[nextState].param1_numFracBits),
-													fx_next_res);
-
-		
-			currStateErr = (fabsf(fl_res - fl_curr_res_dout) / fl_res);
-			nextStateErr = (fabsf(fl_res - fl_next_res_dout) / fl_res);
-		
-			if (nextStateErr <= errorThresh) {
-				if (nextState == agent.m_currentState) {
-					reward = ((1.0f - currStateErr) / float(currentLength)) * (exp(currStateErr) * omega);
-				} else {
-					currStateWht = ((1.0f - currStateErr) / float(currentLength)) * (exp(currStateErr) * omega);
-					nextStateWht = ((1.0f - nextStateErr) / float(nextLength)) * (exp(currStateErr) * omega);		
-					reward = (nextStateWht - currStateWht) + currStateWht;
-				}
-			} else  {
-				reward = -1.0f;
-			}
 	
-		
-			agent.UpdateQTable(reward);
-		
+	// BEGIN CODE -----------------------------------------------------------------------------------------------------------------------------------
+	int action;
+	int nextState;
+	float reward;
+	bool positiveReward;
+	float penalty = -2.0f;
+	float penaltyFactor = 2.0f;
+	float errorThresh = 0.01f;
+	float fl_a = 6.6f;
+	float fl_b = 9.5f;	
+	float currStateBias = (float)rand() / (float)RAND_MAX;
+	float nextStateBias = (float)rand() / (float)RAND_MAX;
+	fd.open("file2.csv");
+	fd << "Epoch" << "," << "CurrentBitWidth" << endl;
+	agent.m_currentState = numStates - 1;
+	fd << 0 << "," << stateTuple[agent.m_currentState].param0_numFracBits + stateTuple[agent.m_currentState].param0_numFracBits << endl;
+	cout << "[INIT] Initial state" << " " << agent.m_currentState << "." << endl;
+	cout << "[INIT] Value is" << " " << fl_a * fl_b << "." << endl << endl;
+	for (int j = 0; j < numEpochs; j++) {
+		cout << "[INFO] Epoch" << " " << j << endl;
+		action = agent.GetNextAction();
+		nextState = index2D(numStates, numActionsPerState, transitionMatrix, agent.m_currentState, action);		
+		reward = getReward(	stateTuple, 
+							fl_a, 
+							fl_b, 
+							agent.m_currentState, 
+							action, 
+							nextState, 
+							errorThresh,
+							(maxNumFracBits + maxNumFracBits),
+							penalty, 
+							penaltyFactor,
+							currStateBias,
+							nextStateBias,
+							positiveReward);
+		agent.UpdateQTable(reward);
+		cout << "[REWARD] Reward for state:" << " " << agent.m_currentState << ", and action:" << " " << action << " " << "is" << " " << reward << "." << endl;
+		if(positiveReward == true) {
+			agent.NextState();
 		}
+		fd << (j + 1) << "," << stateTuple[agent.m_currentState].param0_numFracBits + stateTuple[agent.m_currentState].param0_numFracBits << endl;
 	}
-
-	
+	fd.close();
 	agent.PrintQMatrix();
-	for (int i = 0; i < numStates; i++) {
-		action = agent.GetBestAction(i);
-		if (action == 4 && index2D(numStates, numActionsPerState, agent.m_QMatrix, i, action) != -1)
-		{
-			cout << i << endl;
-		}
-	}
-	cout  << endl;
-	
-	
-	int state = 31;		
-	for (int i = 0; i < numStates; i++) {
-		action = agent.GetBestAction(state);
-		state = index2D(numStates, numActionsPerState, transitionMatrix, state, action);
-	}
-	cout << state << endl;
-	cout << stateTuple[state].param0_numFracBits << ", " << stateTuple[state].param1_numFracBits << endl;
-	fx_curr_a = FixedPoint::create(stateTuple[state].param0_numFracBits, fl_a);
-	fx_curr_b = FixedPoint::create(stateTuple[state].param1_numFracBits, fl_b);
-	cout << endl;
-
-
+	// END CODE -------------------------------------------------------------------------------------------------------------------------------------
 
 		
 	return 0;

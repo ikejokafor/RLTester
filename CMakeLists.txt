@@ -47,22 +47,6 @@ PROJECT(${TARGET_NAME})
 # END Set VS startup Project ------------------------------------------------------------------------------------------------------------------------
 
 
-# BEGIN Set Output Path for libs or bins ------------------------------------------------------------------------------------------------------------
-# Option 1) Executable
-#    SET_TARGET_PROPERTIES(${TARGET_NAME} PROPERTIES
-#                            RUNTIME_OUTPUT_DIRECTORY 
-#                            ${PROJECT_SOURCE_DIR}/<path>)
-# Option 2) Static lib                           
-#    SET_TARGET_PROPERTIES(${TARGET_NAME} PROPERTIES
-#                            LIBRARY_OUTPUT_DIRECTORY 
-#                            ${PROJECT_SOURCE_DIR}/<path>)
-# Option 3) Shared lib                           
-#    SET_TARGET_PROPERTIES(${TARGET_NAME} PROPERTIES
-#                            ARCHIVE_OUTPUT_DIRECTORY 
-#                            ${PROJECT_SOURCE_DIR}/<path>)                        
-# END Set Output Path for libs or bins --------------------------------------------------------------------------------------------------------------
-
-
 # BEGIN Compiler Definitions ------------------------------------------------------------------------------------------------------------------------
 #add_definitions(-DLINUX)
 # END Compiler Definitions --------------------------------------------------------------------------------------------------------------------------
@@ -104,6 +88,13 @@ FILE(GLOB TARGET_HEADERS
 # BEGIN Target Settings -----------------------------------------------------------------------------------------------------------------------------
 ADD_EXECUTABLE(${TARGET_NAME} ${TARGET_SRCS} ${TARGET_HEADERS})
 # END Target Settings -------------------------------------------------------------------------------------------------------------------------------
+
+
+# BEGIN Set Output Path for libs or bins ------------------------------------------------------------------------------------------------------------
+SET_TARGET_PROPERTIES(${TARGET_NAME} PROPERTIES
+                        RUNTIME_OUTPUT_DIRECTORY 
+                        ${PROJECT_SOURCE_DIR}/build/)                        
+# END Set Output Path for libs or bins --------------------------------------------------------------------------------------------------------------
 
 
 # BEGIN Build dependencies --------------------------------------------------------------------------------------------------------------------------
