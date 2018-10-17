@@ -12,121 +12,9 @@ typedef struct stateTuple {
 	// state params
 	int param0_numFracBits;
 	int param1_numFracBits;
-	int param2_numFracBits;
-	int param3_numFracBits;
-	int param4_numFracBits;
-	int param5_numFracBits;
-	int param6_numFracBits;
-	int param7_numFracBits;
-	int param8_numFracBits;	
 	// state matrix encoding
 	int stateEncoding;
 } stateTuple_t;
-
-
-typedef struct filter {
-	float filter0;
-	float filter1;
-	float filter2;
-	float filter3;
-	float filter4;
-	float filter5;
-	float filter6;
-	float filter7;
-	float filter8;
-} filter_t;
-
-
-typedef struct input {
-	float input0;
-	float input1;
-	float input2;
-	float input3;
-	float input4;
-	float input5;
-	float input6;
-	float input7;
-	float input8;
-} input_t;
-
-
-typedef struct filter_fxPt {
-	FixedPoint_t filter0;
-	FixedPoint_t filter1;
-	FixedPoint_t filter2;
-	FixedPoint_t filter3;
-	FixedPoint_t filter4;
-	FixedPoint_t filter5;
-	FixedPoint_t filter6;
-	FixedPoint_t filter7;
-	FixedPoint_t filter8;
-} filter_fxPt_t;
-
-
-
-typedef struct input_fxPt {
-	FixedPoint_t input0;
-	FixedPoint_t input1;
-	FixedPoint_t input2;
-	FixedPoint_t input3;
-	FixedPoint_t input4;
-	FixedPoint_t input5;
-	FixedPoint_t input6;
-	FixedPoint_t input7;
-	FixedPoint_t input8;
-} input_fxPt_t;
-
-
-FixedPoint_t doConvolution(stateTuple_t stateTuple0, stateTuple_t stateTuple1, filter_t filter, input_t input, FixedPoint_t &fxPtRes) {
-	input_fxPt_t input_fxPt;
-	input_fxPt.input0 = FixedPoint::create(stateTuple0.param0_numFracBits, input.input0);
-	input_fxPt.input1 = FixedPoint::create(stateTuple0.param1_numFracBits, input.input1);
-	input_fxPt.input2 = FixedPoint::create(stateTuple0.param2_numFracBits, input.input2);
-	input_fxPt.input3 = FixedPoint::create(stateTuple0.param3_numFracBits, input.input3);
-	input_fxPt.input4 = FixedPoint::create(stateTuple0.param4_numFracBits, input.input4);
-	input_fxPt.input5 = FixedPoint::create(stateTuple0.param5_numFracBits, input.input5);
-	input_fxPt.input6 = FixedPoint::create(stateTuple0.param6_numFracBits, input.input6);
-	input_fxPt.input7 = FixedPoint::create(stateTuple0.param7_numFracBits, input.input7);
-	input_fxPt.input8 = FixedPoint::create(stateTuple0.param8_numFracBits, input.input8);
-
-	
-	filter_fxPt filter_fxPt;
-	filter_fxPt.filter0 = FixedPoint::create(stateTuple1.param0_numFracBits, filter.filter0);
-	filter_fxPt.filter1 = FixedPoint::create(stateTuple1.param1_numFracBits, filter.filter1);
-	filter_fxPt.filter2 = FixedPoint::create(stateTuple1.param2_numFracBits, filter.filter2);
-	filter_fxPt.filter3 = FixedPoint::create(stateTuple1.param3_numFracBits, filter.filter3);
-	filter_fxPt.filter4 = FixedPoint::create(stateTuple1.param4_numFracBits, filter.filter4);
-	filter_fxPt.filter5 = FixedPoint::create(stateTuple1.param5_numFracBits, filter.filter5);
-	filter_fxPt.filter6 = FixedPoint::create(stateTuple1.param6_numFracBits, filter.filter6);
-	filter_fxPt.filter7 = FixedPoint::create(stateTuple1.param7_numFracBits, filter.filter7);
-	filter_fxPt.filter8 = FixedPoint::create(stateTuple1.param8_numFracBits, filter.filter8);
-	
-	
-	return  (	filter_fxPt.filter0 * input_fxPt.input0 
-					+ filter_fxPt.filter1 * input_fxPt.input1
-					+ filter_fxPt.filter2 * input_fxPt.input2
-					+ filter_fxPt.filter3 * input_fxPt.input3
-					+ filter_fxPt.filter4 * input_fxPt.input4
-					+ filter_fxPt.filter5 * input_fxPt.input5
-					+ filter_fxPt.filter6 * input_fxPt.input6
-					+ filter_fxPt.filter7 * input_fxPt.input7
-					+ filter_fxPt.filter8 * input_fxPt.input8
-			);
-}
-
-
-float doConvolution(filter_t filter, input_t input) {
-	return (	filter.filter0 * input.input0 
-					+ filter.filter1 * input.input1
-					+ filter.filter2 * input.input2
-					+ filter.filter3 * input.input3
-					+ filter.filter4 * input.input4
-					+ filter.filter5 * input.input5
-					+ filter.filter6 * input.input6
-					+ filter.filter7 * input.input7
-					+ filter.filter8 * input.input8
-			);
-}
 
 
 float getReward(stateTuple_t *stateTuple, 
@@ -137,10 +25,6 @@ float getReward(stateTuple_t *stateTuple,
 				int nextState, 
 				float errorThresh,
 				float maxPrec,
-				float penalty,
-				float penaltyFactor,
-				float currStateBias,
-				float nextStateBias,
 				bool &positiveReward) {
 	float currentStateLength = stateTuple[currentState].param0_numFracBits + stateTuple[currentState].param1_numFracBits;
 	float nextStateLength = stateTuple[nextState].param0_numFracBits + stateTuple[nextState].param1_numFracBits;
@@ -185,7 +69,7 @@ float getReward(stateTuple_t *stateTuple,
 		reward = -FLT_MAX;
 		positiveReward = false;
 	}
-					
+
 	
 	return reward;
 }
@@ -279,13 +163,9 @@ int main(int argc, char **argv) {
 	int nextState;
 	float reward;
 	bool positiveReward;
-	float penalty = -2.0f;
-	float penaltyFactor = 2.0f;
 	float errorThresh = 0.0002f;
 	float fl_a = 6.6f;
 	float fl_b = 9.5f;	
-	float currStateBias = (float)rand() / (float)RAND_MAX;
-	float nextStateBias = (float)rand() / (float)RAND_MAX;
 	fd.open("file2.csv");
 	fd << "Epoch" << "," << "CurrentBitWidth" << "," << "param0_numFracBits" << "," << "param1_numFracBits" << endl;
 	agent.m_currentState = numStates - 1;
@@ -311,10 +191,6 @@ int main(int argc, char **argv) {
 							nextState, 
 							errorThresh,
 							(maxNumFracBits + maxNumFracBits),
-							penalty, 
-							penaltyFactor,
-							currStateBias,
-							nextStateBias,
 							positiveReward);
 		agent.UpdateQTable(reward);
 		cout << "[REWARD] Reward for state:" << " " << agent.m_currentState << ", and action:" << " " << action << " " << "is" << " " << reward << "." << endl;
@@ -344,6 +220,6 @@ int main(int argc, char **argv) {
 	cout << "[INFO] Final Error is" << 	" " << currStateErr << " " << "for parm0FracBits:" << " " << stateTuple[agent.m_currentState].param0_numFracBits << ", parm1FracBits:" << " " << stateTuple[agent.m_currentState].param1_numFracBits << "." << endl;
 	// END CODE -------------------------------------------------------------------------------------------------------------------------------------
 
-		
+
 	return 0;
 }
