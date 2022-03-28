@@ -2,5 +2,6 @@
 
 Tester application for reinforcement Learning Library
 
-Dependencies:
-    RL
+## Dependencies
+
+RL
